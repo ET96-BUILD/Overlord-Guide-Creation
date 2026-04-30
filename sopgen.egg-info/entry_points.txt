@@ -1,2 +1,0 @@
-[console_scripts]
-sopgen = sopgen.__main__:cli
