@@ -5,3 +5,7 @@ __pycache__/
 .pytest_cache/
 dist/
 build/
+data/
+projects/
+out/
+.claude/settings.local.json
