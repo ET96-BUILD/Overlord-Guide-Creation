@@ -1,0 +1,43 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+*.egg-info
+.mypy_cache
+.ruff_cache
+
+# Local config / secrets
+.env
+.env.*
+
+# Editor / IDE
+.vscode
+.idea
+.claude
+
+# Project data dirs (recordings, outputs, sample SOPs)
+data
+projects
+out
+
+# Build artifacts
+dist
+build
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Tests (not run inside container)
+tests
+
+# OS junk
+.DS_Store
+Thumbs.db

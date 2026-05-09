@@ -22,7 +22,16 @@ class ValidationResult:
 
 
 class SOPValidator:
-    """Validates raw JSON against the SOPDocument schema."""
+    """Validates raw JSON against the SOPDocument schema.
+
+    The substep upper bound is a business-rule policy, not a structural
+    schema constraint, so it's parameterized here rather than baked into
+    the Pydantic model. Defaults to 4 to preserve historical behavior
+    when callers don't pass a configured value.
+    """
+
+    def __init__(self, max_substeps: int = 4) -> None:
+        self.max_substeps = max_substeps
 
     def validate(self, raw_json: str) -> ValidationResult:
         """Parse and validate a JSON string.
@@ -53,9 +62,10 @@ class SOPValidator:
         # 3) Extra business-rule checks that Pydantic can't express easily
         extra_errors: list[str] = []
         for i, step in enumerate(sop.steps):
-            if len(step.substeps) > 4:
+            if len(step.substeps) > self.max_substeps:
                 extra_errors.append(
-                    f"Step {i + 1}: has {len(step.substeps)} substeps (max 4)"
+                    f"Step {i + 1}: has {len(step.substeps)} substeps "
+                    f"(max {self.max_substeps})"
                 )
             if len(step.evidence.recommended_screenshot_timestamps) < 1:
                 extra_errors.append(
@@ -98,7 +108,9 @@ def run_with_repair(
 
     assert isinstance(analyzer, VideoAnalyzer)
 
-    validator = SOPValidator()
+    validator = SOPValidator(
+        max_substeps=analyzer.settings.max_substeps_per_step,
+    )
 
     # Initial generation
     raw_json = analyzer.analyze(

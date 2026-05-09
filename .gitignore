@@ -9,3 +9,7 @@ data/
 projects/
 out/
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# A/B model-comparison outputs (real business data, not for the repo)
+ab/

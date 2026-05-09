@@ -1,0 +1,920 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iFixit SOP Generator</title>
+  <style>
+    /* ── Calm dark mode palette ──────────────────────────────────── */
+    :root {
+      --bg: #454447;             /* dark body background           */
+      --surface: #5a5a5d;        /* elevated dark card surface     */
+      --fg: #f5f5f7;             /* light text on body and cards   */
+      --fg-on-bg: #f5f5f7;       /* alias of --fg, kept for any    */
+                                  /* legacy rules referencing it    */
+      --fg-muted: #B5B5BA;       /* secondary text + default border */
+      --accent: #67D7F8;         /* cyan: selected / focus /        */
+                                  /* dragover / primary buttons     */
+      --error: #ff7676;          /* error text                      */
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--fg-on-bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Two-column shell ────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 32px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+
+    @media (max-width: 800px) {
+      .layout { grid-template-columns: 1fr; gap: 24px; }
+    }
+
+    main { min-width: 0; }
+
+    /* ── Header (sits directly on the dark body) ─────────────────── */
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--fg-on-bg);
+    }
+
+    .tagline {
+      margin: 0 0 32px;
+      color: var(--fg-on-bg);
+      font-size: 15px;
+    }
+
+    /* ── Form fields (title / domain hint) ───────────────────────── */
+    .hints {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 600px) {
+      .hints { grid-template-columns: 1fr; }
+    }
+
+    .hints label {
+      display: flex;
+      flex-direction: column;
+      font-size: 13px;
+      color: var(--fg-muted);
+      gap: 6px;
+    }
+
+    .hints input {
+      background: var(--surface);
+      border: 1px solid var(--fg-muted);
+      color: var(--fg);
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+      border-radius: var(--radius);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .hints input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(103, 215, 248, 0.25);
+    }
+
+    /* ── Model selector ──────────────────────────────────────────── */
+    .model-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+
+    .model-row > .label {
+      font-size: 13px;
+      color: var(--fg-muted);
+    }
+
+    .model-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .model-option {
+      flex: 1 1 240px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--fg-muted);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+      color: var(--fg);
+    }
+
+    .model-option:hover {
+      border-color: var(--accent);
+    }
+
+    .model-option input[type="radio"] {
+      accent-color: var(--accent);
+      margin-top: 2px;
+      flex: 0 0 auto;
+    }
+
+    .model-option:has(input[type="radio"]:checked) {
+      border-color: var(--accent);
+    }
+
+    .model-option .name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .model-option .desc {
+      color: var(--fg-muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .model-helper {
+      color: var(--fg-muted);
+      font-style: italic;
+      font-size: 12px;
+      margin: 0;
+    }
+
+    /* ── Dropzone (3 states with smooth transitions) ─────────────── */
+    .dropzone {
+      border: 2px dashed var(--fg-muted);
+      border-radius: var(--radius);
+      background: var(--surface);
+      min-height: 320px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 48px 24px;
+      cursor: pointer;
+      user-select: none;
+      color: var(--fg);
+      transition:
+        background 150ms ease,
+        border-color 150ms ease,
+        border-style 150ms ease,
+        transform 150ms ease,
+        box-shadow 150ms ease;
+    }
+
+    .dropzone:hover:not(.dragover) {
+      border-color: var(--accent);
+      border-style: solid;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--accent);
+      border-style: solid;
+      /* ~5% lighter than --surface so the surface itself signals the
+         drag is active, in addition to the border colour and glow. */
+      background: #66666a;
+      transform: scale(1.005);
+      box-shadow: inset 0 0 0 4px rgba(103, 215, 248, 0.20);
+    }
+
+    .dropzone.disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .dropzone-primary {
+      font-size: 18px;
+      margin: 0 0 8px;
+      color: var(--fg);
+    }
+
+    .dropzone-secondary {
+      color: var(--fg-muted);
+      font-size: 13px;
+      margin: 0;
+    }
+
+    /* ── Status panels (progress / done / error) ─────────────────── */
+    .panel {
+      margin-top: 32px;
+      background: var(--surface);
+      border: 1px solid var(--fg-muted);
+      border-radius: var(--radius);
+      padding: 32px;
+      text-align: center;
+      color: var(--fg);
+    }
+
+    .stage-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      font-size: 16px;
+      color: var(--fg);
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--fg-muted);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .filename {
+      margin-top: 12px;
+      color: var(--fg-muted);
+      font-size: 13px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────── */
+    .btn-primary,
+    .btn-secondary {
+      display: inline-block;
+      padding: 12px 24px;
+      border-radius: var(--radius);
+      font: inherit;
+      font-weight: 600;
+      font-size: 15px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      text-decoration: none;
+      transition: filter 0.15s, background 0.15s, border-color 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      /* Dark text on the cyan accent — --fg is now light text for dark
+         surfaces, which would be illegible on the bright cyan. */
+      color: var(--bg);
+    }
+
+    .btn-primary:hover {
+      filter: brightness(0.95);
+    }
+
+    .btn-secondary {
+      /* Transparent so it shows the panel's --surface through;
+         the border defines the button shape. */
+      background: transparent;
+      color: var(--fg);
+      border-color: var(--fg-muted);
+      margin-left: 12px;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+    }
+
+    .error-msg {
+      color: var(--error);
+      margin: 0 0 20px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ── Sidebar (two stacked light cards on the dark body) ──────── */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-self: start;
+    }
+
+    .sidebar-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 20px;
+      color: var(--fg);
+    }
+
+    .sidebar-card h2 {
+      margin: 0 0 14px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+
+    .leaderboard {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .leaderboard li {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--fg);
+    }
+
+    .leaderboard .medal {
+      flex: 0 0 1.4em;
+      text-align: center;
+      font-size: 16px;
+    }
+
+    .leaderboard .name {
+      flex: 1 1 auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .leaderboard .count {
+      flex: 0 0 auto;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--fg-muted);
+    }
+
+    .leaderboard-empty {
+      color: var(--fg-muted);
+      font-size: 13px;
+      font-style: italic;
+      margin: 0;
+    }
+
+    .stats-total {
+      font-size: 36px;
+      font-weight: 700;
+      text-align: center;
+      color: var(--fg);
+      margin: 8px 0 0;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    /* ── Cowork publish-help (lives inside the Done panel) ──────── */
+    .publish-help {
+      margin-top: 24px;
+      text-align: left;
+      /* .sidebar-card supplies the light background, padding, radius,
+         and h2 styling so the look matches the leaderboard cards. */
+    }
+
+    .publish-steps {
+      margin: 0;
+      padding-left: 22px;
+      color: var(--fg);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .publish-steps li + li {
+      margin-top: 6px;
+    }
+
+    .publish-steps code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12.5px;
+      /* Slightly stronger tint so inline code stands out against the
+         darker --surface card (was 0.12 on the old light-cyan card). */
+      background: rgba(103, 215, 248, 0.20);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--fg);
+    }
+
+    .copy-prompt-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .primary-btn {
+      background: var(--accent);
+      /* Same rationale as .btn-primary above. */
+      color: var(--bg);
+      border: 1px solid transparent;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      font: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: filter 0.15s;
+    }
+
+    .primary-btn:hover {
+      filter: brightness(0.92);
+    }
+
+    .copy-prompt-status {
+      font-size: 13px;
+      font-style: italic;
+      color: var(--fg-muted);
+    }
+
+    .copy-prompt-fallback {
+      margin-top: 12px;
+      width: 100%;
+      min-height: 200px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: var(--bg);
+      color: var(--fg-on-bg);
+      border: 1px solid var(--fg-muted);
+      border-radius: var(--radius);
+      resize: vertical;
+    }
+
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <main>
+      <h1>iFixit SOP Generator</h1>
+      <p class="tagline">Drop a screen recording. Get a structured SOP back as a downloadable bundle.</p>
+
+      <div class="hints">
+        <label>
+          Title hint (optional)
+          <input id="title-hint" type="text" placeholder="e.g. How to Pay Vendor Commission" autocomplete="off">
+        </label>
+        <label>
+          Domain hint (optional)
+          <input id="domain-hint" type="text" placeholder="e.g. NetSuite AP process" autocomplete="off">
+        </label>
+      </div>
+
+      <div class="model-row" role="group" aria-labelledby="model-label">
+        <span id="model-label" class="label">Model</span>
+        <div class="model-options">
+          <label class="model-option">
+            <input type="radio" name="model" value="gemini-2.5-pro">
+            <span>
+              <span class="name">Pro</span>
+              <span class="desc">Higher quality, ~10× more expensive. Assume $0.50–$0.60 per 15 min of video.</span>
+            </span>
+          </label>
+          <label class="model-option">
+            <input type="radio" name="model" value="gemini-2.5-flash">
+            <span>
+              <span class="name">Flash</span>
+              <span class="desc">Faster, cheaper, may miss small details.</span>
+            </span>
+          </label>
+        </div>
+        <p class="model-helper">If you are unhappy with the output, try another model.</p>
+      </div>
+
+      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Upload video">
+        <p class="dropzone-primary">Drag a screen recording here</p>
+        <p class="dropzone-secondary">…or click to choose a file. mp4, mov, webm, etc.</p>
+        <input id="file-input" type="file" accept="video/*" hidden>
+      </div>
+
+      <div id="progress" class="panel" hidden>
+        <div class="stage-row">
+          <div class="spinner" aria-hidden="true"></div>
+          <span id="stage-label">Queued…</span>
+        </div>
+        <div id="filename" class="filename"></div>
+      </div>
+
+      <div id="done" class="panel" hidden>
+        <p style="margin: 0 0 20px; font-size: 18px;">Your SOP bundle is ready.</p>
+        <a id="download-link" class="btn-primary" download>Download bundle (.zip)</a>
+
+        <section class="publish-help sidebar-card">
+          <h2>Publish to Overlord with Cowork</h2>
+          <ol class="publish-steps">
+            <li>Extract the downloaded zip to a folder.</li>
+            <li>Open Cowork (the desktop app) and grant it access to that folder.</li>
+            <li>Sign into Overlord, Finance, or whichever iFixit subdomain you're publishing to in Chrome.</li>
+            <li>Open a new guide form at <code>&lt;subdomain&gt;.ifixit.com/Guide/new/Topic/Root</code> and have that tab visible.</li>
+            <li>Click <strong>Copy Cowork prompt</strong> below, then paste it as your message in Cowork. Cowork creates the guide skeleton, fills in all steps and substeps, and applies bullet styling.</li>
+            <li>After Cowork finishes, drag the PNG images from your extracted folder into each step's image dropzone manually.</li>
+            <li>Review the guide. Privacy is set to Private by default — share the URL with whoever needs to review.</li>
+          </ol>
+          <div class="copy-prompt-row">
+            <button id="copy-prompt" class="primary-btn" type="button">
+              Copy Cowork prompt to clipboard
+            </button>
+            <span id="copy-prompt-status" class="copy-prompt-status" aria-live="polite"></span>
+          </div>
+        </section>
+
+        <button type="button" id="another-btn" class="btn-secondary">Generate another</button>
+      </div>
+
+      <div id="error" class="panel" hidden>
+        <p id="error-message" class="error-msg"></p>
+        <button type="button" id="reset-btn" class="btn-primary">Start over</button>
+      </div>
+    </main>
+
+    <aside id="sidebar" class="sidebar" aria-label="Stats">
+      <section class="sidebar-card" aria-label="Top guide makers">
+        <h2>Top guide makers</h2>
+        <ol id="leaderboard" class="leaderboard"></ol>
+        <p id="leaderboard-empty" class="leaderboard-empty" hidden>No guides yet. Be the first.</p>
+      </section>
+      <section class="sidebar-card" aria-label="Guides created">
+        <h2>Guides created</h2>
+        <p id="stats-total" class="stats-total" aria-live="polite">…</p>
+      </section>
+    </aside>
+  </div>
+
+  <script>
+    "use strict";
+
+    // ── Stage → user-facing label ────────────────────────────────────
+    const STAGE_LABELS = {
+      "queued": "Queued…",
+      "uploading": "Uploading to Gemini…",
+      "analyzing": "Analyzing video…",
+      "extracting frames": "Extracting screenshots…",
+      "packaging": "Packaging output…",
+      "done": "Done",
+      "error": "Error",
+    };
+
+    const POLL_INTERVAL_MS = 2000;
+    const FALLBACK_MODEL = "gemini-2.5-flash";
+    const MEDALS = ["🥇", "🥈", "🥉"];
+
+    const $ = (id) => document.getElementById(id);
+    const dropzone = $("dropzone");
+    const fileInput = $("file-input");
+    const progressPanel = $("progress");
+    const stageLabel = $("stage-label");
+    const filenameEl = $("filename");
+    const donePanel = $("done");
+    const downloadLink = $("download-link");
+    const errorPanel = $("error");
+    const errorMessage = $("error-message");
+    const titleHintInput = $("title-hint");
+    const domainHintInput = $("domain-hint");
+    const sidebar = $("sidebar");
+    const leaderboardEl = $("leaderboard");
+    const leaderboardEmpty = $("leaderboard-empty");
+    const statsTotalEl = $("stats-total");
+
+    let pollTimer = null;
+
+    // ── Server-driven model default ─────────────────────────────────
+    function selectModelRadio(modelValue) {
+      const radios = document.querySelectorAll('input[name="model"]');
+      let matched = false;
+      for (const r of radios) {
+        if (r.value === modelValue) { r.checked = true; matched = true; break; }
+      }
+      if (!matched) {
+        for (const r of radios) {
+          if (r.value === FALLBACK_MODEL) { r.checked = true; break; }
+        }
+      }
+    }
+    fetch("/v1/config")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((cfg) => selectModelRadio(cfg.default_model))
+      .catch(() => selectModelRadio(FALLBACK_MODEL));
+
+    // ── Stats total (sidebar card) ──────────────────────────────────
+    function refreshStats() {
+      fetch("/v1/stats")
+        .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+        .then((s) => {
+          const n = typeof s.guides_created === "number" ? s.guides_created : 0;
+          statsTotalEl.textContent = String(n);
+        })
+        .catch(() => {
+          // On failure, show a dash rather than a misleading number.
+          statsTotalEl.textContent = "—";
+        });
+    }
+    refreshStats();
+
+    // ── Leaderboard ──────────────────────────────────────────────────
+    function renderLeaderboard(top) {
+      leaderboardEl.innerHTML = "";
+      if (!top || top.length === 0) {
+        leaderboardEmpty.hidden = false;
+        return;
+      }
+      leaderboardEmpty.hidden = true;
+      top.forEach((entry, idx) => {
+        const li = document.createElement("li");
+
+        const medal = document.createElement("span");
+        medal.className = "medal";
+        medal.textContent = MEDALS[idx] || "";
+        li.appendChild(medal);
+
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = displayName(entry.email);
+        li.appendChild(name);
+
+        const count = document.createElement("span");
+        count.className = "count";
+        count.textContent = String(entry.count);
+        li.appendChild(count);
+
+        leaderboardEl.appendChild(li);
+      });
+    }
+
+    function displayName(email) {
+      if (!email) return "";
+      const at = email.indexOf("@");
+      return at > 0 ? email.slice(0, at) : email;
+    }
+
+    function refreshLeaderboard() {
+      fetch("/v1/leaderboard?limit=5")
+        .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+        .then((data) => renderLeaderboard(data.top || []))
+        .catch(() => { sidebar.hidden = true; });
+    }
+    refreshLeaderboard();
+
+    // ── Drag-drop wiring (counter avoids child-element flicker) ─────
+    let dragCounter = 0;
+
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    dropzone.addEventListener("dragenter", (e) => {
+      e.preventDefault();
+      dragCounter++;
+      if (dragCounter === 1) dropzone.classList.add("dragover");
+    });
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+    });
+    dropzone.addEventListener("dragleave", () => {
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        dropzone.classList.remove("dragover");
+      }
+    });
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      dropzone.classList.remove("dragover");
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    $("another-btn").addEventListener("click", reset);
+    $("reset-btn").addEventListener("click", reset);
+
+    // ── Copy Cowork prompt (Done panel) ─────────────────────────────
+    // The frontend dir is mounted at "/", so cowork_prompt.txt is
+    // served at /cowork_prompt.txt (the /static mount serves job
+    // artifacts from data_dir, not app assets).
+    const COWORK_PROMPT_URL = "/cowork_prompt.txt";
+
+    $("copy-prompt").addEventListener("click", copyCoworkPrompt);
+
+    async function copyCoworkPrompt() {
+      const status = $("copy-prompt-status");
+      const flash = (msg, ms = 2000) => {
+        status.textContent = msg;
+        if (ms > 0) {
+          setTimeout(() => {
+            if (status.textContent === msg) status.textContent = "";
+          }, ms);
+        }
+      };
+
+      // 1) Pull the canonical prompt text from disk.
+      let text;
+      try {
+        const resp = await fetch(COWORK_PROMPT_URL);
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        text = await resp.text();
+      } catch (_) {
+        revealManualFallback("");
+        flash(
+          "Copy failed — open " + COWORK_PROMPT_URL + " and copy manually",
+          0,
+        );
+        return;
+      }
+
+      // 2) Modern clipboard API (requires HTTPS or localhost).
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          flash("Copied!");
+          return;
+        } catch (_) {
+          /* fall through to legacy path */
+        }
+      }
+
+      // 3) Legacy fallback: hidden textarea + execCommand('copy').
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.top = "-1000px";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (ok) {
+          flash("Copied!");
+          return;
+        }
+      } catch (_) {
+        /* fall through */
+      }
+
+      // 4) Total failure: reveal a textarea so the user can copy by hand.
+      revealManualFallback(text);
+      flash(
+        "Copy failed — open " + COWORK_PROMPT_URL + " and copy manually",
+        0,
+      );
+    }
+
+    function revealManualFallback(text) {
+      let ta = document.getElementById("copy-prompt-fallback");
+      if (!ta) {
+        ta = document.createElement("textarea");
+        ta.id = "copy-prompt-fallback";
+        ta.className = "copy-prompt-fallback";
+        ta.readOnly = true;
+        const row = document.querySelector(".copy-prompt-row");
+        row.parentNode.insertBefore(ta, row.nextSibling);
+      }
+      ta.value = text;
+      ta.hidden = false;
+      ta.focus();
+      ta.select();
+    }
+
+    // ── Upload + polling ─────────────────────────────────────────────
+    async function handleFile(file) {
+      dropzone.classList.add("disabled");
+      filenameEl.textContent = file.name;
+      showOnly(progressPanel);
+      stageLabel.textContent = STAGE_LABELS["queued"];
+
+      const form = new FormData();
+      form.append("video", file);
+      const titleHint = titleHintInput.value.trim();
+      const domainHint = domainHintInput.value.trim();
+      if (titleHint) form.append("title_hint", titleHint);
+      if (domainHint) form.append("domain_hint", domainHint);
+      const selectedModel = document.querySelector('input[name="model"]:checked');
+      if (selectedModel) form.append("model", selectedModel.value);
+
+      let job;
+      try {
+        const resp = await fetch("/v1/sop", { method: "POST", body: form });
+        if (!resp.ok) {
+          const detail = await safeDetail(resp);
+          throw new Error(detail || `Upload failed: HTTP ${resp.status}`);
+        }
+        job = await resp.json();
+      } catch (err) {
+        showError(err.message || String(err));
+        return;
+      }
+
+      pollStatus(job.job_id);
+    }
+
+    function pollStatus(jobId) {
+      const tick = async () => {
+        try {
+          const resp = await fetch(`/v1/jobs/${encodeURIComponent(jobId)}/status`);
+          if (!resp.ok) {
+            const detail = await safeDetail(resp);
+            throw new Error(detail || `Status fetch failed: HTTP ${resp.status}`);
+          }
+          const s = await resp.json();
+          stageLabel.textContent = STAGE_LABELS[s.stage] || s.stage || "Working…";
+
+          if (s.status === "done") {
+            stopPolling();
+            showDone(jobId);
+          } else if (s.status === "error") {
+            stopPolling();
+            showError(s.error || "Pipeline failed.");
+          }
+        } catch (err) {
+          stopPolling();
+          showError(err.message || String(err));
+        }
+      };
+
+      tick();
+      pollTimer = setInterval(tick, POLL_INTERVAL_MS);
+    }
+
+    function stopPolling() {
+      if (pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    function showDone(jobId) {
+      downloadLink.href = `/v1/jobs/${encodeURIComponent(jobId)}/zip`;
+      showOnly(donePanel);
+      // Bump both sidebar cards without a full page reload.
+      refreshStats();
+      refreshLeaderboard();
+    }
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      showOnly(errorPanel);
+    }
+
+    function reset() {
+      stopPolling();
+      fileInput.value = "";
+      filenameEl.textContent = "";
+      dropzone.classList.remove("disabled");
+      progressPanel.hidden = true;
+      donePanel.hidden = true;
+      errorPanel.hidden = true;
+      dropzone.hidden = false;
+      titleHintInput.disabled = false;
+      domainHintInput.disabled = false;
+    }
+
+    function showOnly(panel) {
+      dropzone.hidden = true;
+      progressPanel.hidden = panel !== progressPanel;
+      donePanel.hidden = panel !== donePanel;
+      errorPanel.hidden = panel !== errorPanel;
+    }
+
+    async function safeDetail(resp) {
+      try {
+        const data = await resp.json();
+        return data && data.detail;
+      } catch (_) {
+        return null;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -13,7 +13,11 @@ from typing import Optional
 
 from sopgen.core.config import Settings
 from sopgen.gemini.client import GeminiClient
-from sopgen.gemini.prompts import SYSTEM_INSTRUCTION, build_repair_prompt, build_sop_prompt
+from sopgen.gemini.prompts import (
+    build_repair_prompt,
+    build_sop_prompt,
+    build_system_instruction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +65,21 @@ class VideoAnalyzer:
                 video_bytes, mime_type, fps_override=fps_override
             )
 
-        prompt = build_sop_prompt(title_hint=title_hint, domain_hint=domain_hint)
+        prompt = build_sop_prompt(
+            self.settings,
+            title_hint=title_hint,
+            domain_hint=domain_hint,
+        )
         raw = self.client.generate_with_video(
             video_part,
             prompt,
-            system_instruction=SYSTEM_INSTRUCTION,
+            system_instruction=build_system_instruction(self.settings),
         )
         return _extract_json(raw)
 
     def repair(self, original_json: str, errors: list[str]) -> str:
         """Send a text-only repair prompt and return corrected JSON."""
-        prompt = build_repair_prompt(original_json, errors)
+        prompt = build_repair_prompt(original_json, errors, self.settings)
         raw = self.client.generate_text(prompt)
         return _extract_json(raw)
 

@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import shutil
 from pathlib import Path
+from typing import Optional
 
 from sopgen.api.schemas import SOPDocument
 
@@ -33,8 +35,10 @@ class SOPPackager:
         sop: SOPDocument,
         frame_map: dict[str, Path],
         job_id: str,
+        output_images_dir: Path,
         *,
         embed_base64: bool = False,
+        image_base_url: Optional[str] = None,
     ) -> dict:
         """Build the API response dict.
 
@@ -43,15 +47,29 @@ class SOPPackager:
         sop : SOPDocument
             Validated SOP.
         frame_map : dict[str, Path]
-            ``{timestamp: local_path}`` from ffmpeg extraction.
+            ``{timestamp: local_path}`` from ffmpeg extraction. The raw
+            timestamped frames are kept on disk as debug artifacts; this
+            method *copies* each one to ``<image_id>.png`` in
+            *output_images_dir* so the user-facing filenames match the
+            ``image_id`` field in the response.
         job_id : str
             Job identifier.
+        output_images_dir : Path
+            Directory where the renamed ``<image_id>.png`` copies will be
+            written. Created if it does not exist.
         embed_base64 : bool
             If ``True``, embed image bytes as ``data:image/png;base64,...``
             strings in each image entry (useful for CLI / offline output).
+        image_base_url : str, optional
+            Override the URL prefix used in the response. Defaults to
+            ``/static/jobs/<job_id>/images`` (the API static mount). CLI
+            callers typically pass ``"images"`` for paths relative to the
+            generated ``sop.json``.
         """
         sop_dict = sop.model_dump()
-        image_base_url = f"/static/jobs/{job_id}/images"
+        if image_base_url is None:
+            image_base_url = f"/static/jobs/{job_id}/images"
+        output_images_dir.mkdir(parents=True, exist_ok=True)
         all_images: list[dict] = []
 
         for step in sop_dict["steps"]:
@@ -63,14 +81,19 @@ class SOPPackager:
             for img_idx, ts in enumerate(ts_list, start=1):
                 image_id = f"step_{step_num}_img_{img_idx}"
                 caption = _find_caption(step["images"], image_id, step["step_title"], ts)
+                filename = f"{image_id}.png"
 
                 entry: dict = {"image_id": image_id, "caption": caption}
-                if ts in frame_map:
-                    fname = frame_map[ts].name
-                    entry["url"] = f"{image_base_url}/{fname}"
+                src = frame_map.get(ts)
+                if src is not None and src.exists():
+                    dest = output_images_dir / filename
+                    shutil.copyfile(src, dest)
+                    entry["filename"] = filename
+                    entry["url"] = f"{image_base_url}/{filename}"
                     if embed_base64:
-                        entry["base64_data"] = _encode(frame_map[ts])
+                        entry["base64_data"] = _encode(dest)
                 else:
+                    entry["filename"] = ""
                     entry["url"] = ""
                     logger.warning(
                         "No frame for step %d ts=%s", step_num, ts

@@ -1,0 +1,112 @@
+# iFixit Guide Builder — Cowork prompt (text + styling only, no images)
+
+You will create a new guide on iFixit's internal guide platform
+from a generated SOP using the per-step editor. You do NOT use the
+Bulk Step Creator (it 404s on these subdomains). You do NOT upload
+any images — image uploads are left to the user as a manual final
+step.
+
+The user will provide:
+  1. A path to a sop.json file (schema: title, intro, steps[] with
+     step_title/substeps/images[image_id, caption]).
+  2. The iFixit subdomain to publish to (finance.ifixit.com,
+     overlord.ifixit.com, repair.ifixit.com, etc.).
+
+If either input isn't given, ask before starting.
+
+WORKFLOW
+
+1. Verify input.
+   - Read sop.json. Confirm it has title, intro, and at least one
+     step with substeps.
+   - Confirm the target subdomain with the user.
+
+2. Create the guide skeleton.
+   - Navigate to https://<subdomain>/Guide/new/Topic/Root in the
+     user's logged-in Chrome (use the Chrome MCP).
+   - On the Introduction tab:
+       a. In the Location (Category Name) field, type "Root" and
+          click the "+" button to commit.
+       b. Set Guide Title to the JSON's `title` field exactly.
+       c. Click "Show More", paste the JSON's `intro` into the
+          Introduction rich-text editor.
+       d. Click Save.
+   - URL becomes /Guide/edit/<guide_id>/... Capture <guide_id>.
+
+3. Fill steps using the per-step editor.
+
+   For step 1 (the page is already on its edit view after save):
+   - Click "Add a title" at the top. Type the JSON's `step_title`.
+     Click outside to commit.
+   - Click the first bullet field ("Insert wisdom here."). Type
+     the first substep verbatim. Preserve any `Caution:`, `Note:`,
+     or `Reminder:` prefix words exactly as written in the JSON.
+   - To add another substep:
+       a. After typing the current substep, click the "+" button
+          in the bullet editor toolbar (the row with ←  →  +  ×
+          below the textarea).
+       b. The new bullet appears with "New line." selected. Type
+          the next substep — the placeholder is replaced.
+       c. Repeat until all substeps for this step are entered.
+   - Hard limits: 8 substeps per step max, 350 chars per substep.
+     If any step in the JSON exceeds either limit, stop and
+     report the offending step before continuing.
+   - Click outside the bullet editor to commit the last bullet.
+   - Click the blue Save button below the bullets.
+   - Do NOT click any image dropzone, do NOT trigger a file
+     picker, do NOT call file_upload. Leave image slots empty.
+   - Click "+ Insert Step" at the bottom-right to create the
+     next step.
+
+   For each subsequent step:
+   - New step opens with "Editing Step N — Add a title" and an
+     empty first bullet. Repeat the same pattern.
+
+4. Apply bullet styling for Caution / Note / Reminder.
+   This pass happens AFTER all steps and substeps are entered.
+   For each step:
+   - For every substep beginning with `Caution:`, `Note:`, or
+     `Reminder:`:
+       - Click the bullet dot (the small ● icon to the left).
+       - In the popover that appears, click the matching style:
+         Caution (red ⚠), Note (i in circle), Reminder (megaphone).
+   - Leave the prefix words in place — they're intentional and
+     stay as part of the substep text.
+
+5. Confirm privacy.
+   - In the right sidebar of any step page, verify Privacy is set
+     to **Private**. This is the default; verify, don't change.
+
+6. Hand back the URL with a clear manual-task summary.
+   - Return the guide URL
+     (https://<subdomain>/Guide/<title-slug>/<guide_id>) for review.
+   - Print this exact summary, replacing N/M:
+       "Guide skeleton built with N steps and M substeps total.
+        Privacy is Private. Two manual tasks remain for the user:
+          1. Upload images. Each step's image dropzone is empty.
+             The image files are named step_<N>_img_<M>.png and
+             live in the folder the SOP generator wrote them to.
+             Drag each PNG into the matching step's image slot in
+             the Guide Steps editor.
+          2. Spot-check the bullet styling on Caution/Note/Reminder
+             substeps to confirm the icons applied correctly."
+
+SAFETY RULES
+
+- Never make the guide Public. Never click "Make Public",
+  "Publish", or anything similar. Private only.
+- Don't edit the SOP content. Field values, button labels, and
+  exact strings are deliberate — paste verbatim.
+- Don't click image dropzones, don't trigger file pickers, don't
+  call file_upload. Images are out of scope for this run.
+- Don't attempt the Bulk Step Creator at /Manage/bulk_step_creator/
+  or any variant — it 404s on these subdomains.
+- Don't click outside a bullet's text area mid-typing — it
+  commits whatever's there. Use the "+" button to add bullets,
+  not Enter.
+- If a save, navigation, or click errors out, screenshot and ask
+  the user how to proceed. Don't retry blindly.
+- If the Chrome MCP isn't connected, stop and ask the user to
+  install/connect it.
+
+Begin by confirming the two inputs.

@@ -37,16 +37,19 @@ def test_video(tmp_path):
     if not _ffmpeg_available:
         pytest.skip("ffmpeg not installed")
     video = tmp_path / "test.mp4"
-    subprocess.run(
-        [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=5:r=1",
-            "-pix_fmt", "yuv420p",
-            str(video),
-        ],
-        capture_output=True,
-        timeout=30,
-    )
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=5:r=1",
+                "-pix_fmt", "yuv420p",
+                str(video),
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        pytest.skip(f"Could not invoke ffmpeg: {exc}")
     if not video.exists():
         pytest.skip("Could not generate test video")
     return video

@@ -28,24 +28,74 @@ Get an API key at <https://aistudio.google.com/app/apikey>.
 
 ### 3. Run the API server
 
+For local development:
+
 ```bash
 python -m sopgen.api.main
 # → http://localhost:8000
 # → Docs at http://localhost:8000/docs
 ```
 
+`python -m sopgen.api.main` boots the app under uvicorn with autoreload —
+fine for iterating, not what production runs.
+
+For production / container deployment the entrypoint is **hypercorn**,
+which negotiates HTTP/2 (h2c) so Cloud Run can forward uploads larger
+than the HTTP/1 32 MiB request-body cap:
+
+```bash
+hypercorn sopgen.api.main:app --bind 0.0.0.0:8080
+```
+
+The Dockerfile's `CMD` already runs hypercorn this way; both servers
+serve the same ASGI app, so there's no app-level difference.
+
 ### 4. Run via CLI
+
+The `run` command supports two modes.
+
+**Single-file mode:**
 
 ```bash
 python -m sopgen run --video recording.mp4 --out ./output
+```
+
+**Batch mode (folder workflow):**
+
+```bash
+# Drop one or more videos into ./projects/recording/, then:
+python -m sopgen run                         # uses ./projects/recording/
+python -m sopgen run --folder some/inbox     # or any custom folder
+```
+
+In batch mode the CLI processes every supported video in the folder
+(alphabetically), skipping dotfiles and non-video files. For each video it:
+
+1. Generates the SOP under `<folder-parent>/out/<video-stem>/`
+   (`sop.json` + `images/<image_id>.png`).
+2. Moves the source video to `<folder-parent>/completed/`.
+   If a file of the same name already exists there, the move target is
+   suffixed with `_YYYYMMDD-HHMMSS` to avoid clobbering.
+3. On failure, leaves the video in the watch folder, logs the error, and
+   continues with the next file. Exit code is `2` if any video failed.
+
+The default layout (created on demand) is:
+
+```
+projects/
+├── recording/   ← drop videos here
+├── completed/   ← processed videos move here
+└── out/
+    └── <video-stem>/   ← sop.json + images/
 ```
 
 Options:
 
 | Flag | Description |
 |------|-------------|
-| `--video` | Path to screen recording (required) |
-| `--out` | Output directory (required) |
+| `--video PATH` | Single-file mode. Mutually exclusive with `--folder`. |
+| `--folder PATH` | Batch mode watch folder. Default: `projects/recording`. |
+| `--out PATH` | Output directory (single-file mode only; ignored in batch). |
 | `--title-hint` | Suggested SOP title |
 | `--domain-hint` | Domain context, e.g. `"NetSuite AP process"` |
 | `--media-resolution` | `low` or `default` |
@@ -173,7 +223,7 @@ All settings use the `SOPGEN_` prefix:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SOPGEN_GEMINI_API_KEY` | *(required)* | Google AI API key |
-| `SOPGEN_GEMINI_MODEL` | `gemini-2.0-flash` | Model to use |
+| `SOPGEN_GEMINI_MODEL` | `gemini-2.5-pro` | Model to use |
 | `SOPGEN_GEMINI_MEDIA_RESOLUTION` | `default` | `low` or `default` |
 | `SOPGEN_GEMINI_VIDEO_FPS_OVERRIDE` | *(none)* | Custom FPS sampling |
 | `SOPGEN_MAX_INLINE_SIZE_MB` | `20` | Inline/Files API threshold |

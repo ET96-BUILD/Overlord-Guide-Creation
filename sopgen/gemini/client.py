@@ -23,7 +23,15 @@ class GeminiClient:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self._client = genai.Client(api_key=settings.gemini_api_key)
+        # google-genai HttpOptions.timeout is in milliseconds. The default
+        # underlying httpx timeout (~60s) is too short for long video
+        # inference, so set it explicitly from config.
+        self._client = genai.Client(
+            api_key=settings.gemini_api_key,
+            http_options=types.HttpOptions(
+                timeout=settings.gemini_request_timeout_seconds * 1000,
+            ),
+        )
         self.model = settings.gemini_model
 
     # ── Files API upload ────────────────────────────────────────────────
@@ -63,17 +71,27 @@ class GeminiClient:
         *,
         system_instruction: Optional[str] = None,
     ) -> str:
-        """Send video + text to the model and return the raw text response."""
+        """Send video + text to the model and return the raw text response.
+
+        Uses streaming so the connection stays alive while the model is
+        producing tokens — long video inference can otherwise blow past
+        httpx's default idle timeout before the first byte arrives.
+        """
         config = self._build_config(system_instruction)
         contents: list = [video_part, text_prompt]
 
-        logger.info("Generating with video — model=%s", self.model)
-        response = self._client.models.generate_content(
+        logger.info("Generating with video (stream) — model=%s", self.model)
+        chunks: list[str] = []
+        stream = self._client.models.generate_content_stream(
             model=self.model,
             contents=contents,
             config=config,
         )
-        return response.text
+        for chunk in stream:
+            text = getattr(chunk, "text", None)
+            if text:
+                chunks.append(text)
+        return "".join(chunks)
 
     def generate_text(self, prompt: str) -> str:
         """Text-only generation (used for repair prompts)."""

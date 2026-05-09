@@ -9,6 +9,11 @@ description = "Generate structured SOPs from screen recording videos using Gemin
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
+    # hypercorn is the production server (HTTP/2 / h2c support so Cloud
+    # Run can forward uploads larger than its 32 MiB HTTP/1 body cap).
+    "hypercorn>=0.17.0",
+    # uvicorn stays as the convenient local-dev entrypoint, used by
+    # `python -m sopgen.api.main` (sopgen/api/main.py imports it lazily).
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
@@ -16,6 +21,7 @@ dependencies = [
     "click>=8.1.0",
     "python-multipart>=0.0.12",
     "python-dotenv>=1.0.0",
+    "python-docx>=1.1.0",
 ]
 
 [project.optional-dependencies]

@@ -13,7 +13,13 @@ class Settings(BaseSettings):
 
     # ── Gemini API ──────────────────────────────────────────────────────
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    # gemini-2.0-flash was retired by Google for new users on 2026-05-08;
+    # 2.5-pro is the current production default.
+    gemini_model: str = "gemini-2.5-pro"
+    # Wall-clock timeout for a single Gemini request (covers long-running
+    # video inference). Default 10 minutes; google-genai's HttpOptions
+    # takes ms internally — we convert at the client.
+    gemini_request_timeout_seconds: int = 600
 
     # ── Media processing ────────────────────────────────────────────────
     gemini_media_resolution: Literal["low", "default"] = "default"
@@ -27,6 +33,9 @@ class Settings(BaseSettings):
     # ── Storage ─────────────────────────────────────────────────────────
     data_dir: Path = Path("./data")
     max_inline_size_mb: int = 20
+    # Persistent guides-created counter. Different default dir than data_dir
+    # so a Cloud Run gcsfuse mount can target it without overlaying job data.
+    stats_path: Path = Path("var/stats.json")
 
     # ── Server ──────────────────────────────────────────────────────────
     api_host: str = "0.0.0.0"

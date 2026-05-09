@@ -72,14 +72,52 @@ class TestValidSOP:
 
 
 class TestSubstepLimit:
-    def test_five_substeps_rejected(self):
+    """The substep cap is parameterized — these tests verify the upper
+    bound is enforced regardless of the configured value."""
+
+    @pytest.mark.parametrize("cap", [4, 5, 7, 10])
+    def test_one_more_than_cap_rejected(self, cap):
         sop = _make_sop()
-        sop["steps"][0]["substeps"] = [
-            "One", "Two", "Three", "Four", "Five"
-        ]
+        sop["steps"][0]["substeps"] = [f"item {i}" for i in range(cap + 1)]
+        result = SOPValidator(max_substeps=cap).validate(json.dumps(sop))
+        assert not result.is_valid
+        # Error message should mention the configured cap, not a hardcoded 4.
+        assert any(f"max {cap}" in e for e in result.errors)
+
+    @pytest.mark.parametrize("cap", [4, 5, 7, 10])
+    def test_exactly_cap_accepted(self, cap):
+        sop = _make_sop()
+        sop["steps"][0]["substeps"] = [f"item {i}" for i in range(cap)]
+        result = SOPValidator(max_substeps=cap).validate(json.dumps(sop))
+        assert result.is_valid, result.errors
+
+    def test_default_cap_is_four(self):
+        """Existing callers that pass no args still get the historical cap=4."""
+        sop = _make_sop()
+        sop["steps"][0]["substeps"] = ["a", "b", "c", "d", "e"]  # 5 > 4
         result = SOPValidator().validate(json.dumps(sop))
         assert not result.is_valid
-        assert any("substep" in e.lower() or "4" in e for e in result.errors)
+        assert any("max 4" in e for e in result.errors)
+
+    def test_seven_substeps_pass_when_cap_is_seven(self):
+        """The original motivating case: SOPGEN_MAX_SUBSTEPS_PER_STEP=7."""
+        sop = _make_sop()
+        sop["steps"][0]["substeps"] = [f"step {i}" for i in range(7)]
+        result = SOPValidator(max_substeps=7).validate(json.dumps(sop))
+        assert result.is_valid, result.errors
+
+    def test_eight_substeps_fail_when_cap_is_seven(self):
+        sop = _make_sop()
+        sop["steps"][0]["substeps"] = [f"step {i}" for i in range(8)]
+        result = SOPValidator(max_substeps=7).validate(json.dumps(sop))
+        assert not result.is_valid
+
+    def test_zero_substeps_always_rejected(self):
+        """min_length=1 is structural and stays regardless of cap."""
+        sop = _make_sop()
+        sop["steps"][0]["substeps"] = []
+        result = SOPValidator(max_substeps=10).validate(json.dumps(sop))
+        assert not result.is_valid
 
 
 class TestMissingScreenshotTimestamps:
