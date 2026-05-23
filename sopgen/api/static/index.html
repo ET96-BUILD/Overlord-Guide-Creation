@@ -35,9 +35,11 @@
     /* ── Two-column shell ────────────────────────────────────────── */
     .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 280px;
+      /* 320px (was 280px) gives the Publish-with-Cowork card enough
+         room for its numbered list + button without crowding. */
+      grid-template-columns: minmax(0, 1fr) 320px;
       gap: 32px;
-      max-width: 1180px;
+      max-width: 1220px;
       margin: 0 auto;
       padding: 48px 24px;
     }
@@ -386,12 +388,11 @@
       line-height: 1;
     }
 
-    /* ── Cowork publish-help (lives inside the Done panel) ──────── */
+    /* ── Cowork publish-help (third sidebar card, always visible) ── */
     .publish-help {
-      margin-top: 24px;
       text-align: left;
-      /* .sidebar-card supplies the light background, padding, radius,
-         and h2 styling so the look matches the leaderboard cards. */
+      /* .sidebar-card supplies the surface, padding, radius, and h2
+         styling so the look matches the leaderboard / stats cards. */
     }
 
     .publish-steps {
@@ -412,6 +413,9 @@
       /* Slightly stronger tint so inline code stands out against the
          darker --surface card (was 0.12 on the old light-cyan card). */
       background: rgba(103, 215, 248, 0.20);
+      /* Wrap long URLs (e.g. step 4's <subdomain>.ifixit.com/Guide/new/
+         …) inside the narrow sidebar column instead of overflowing. */
+      word-break: break-all;
       padding: 1px 6px;
       border-radius: 4px;
       color: var(--fg);
@@ -521,26 +525,6 @@
       <div id="done" class="panel" hidden>
         <p style="margin: 0 0 20px; font-size: 18px;">Your SOP bundle is ready.</p>
         <a id="download-link" class="btn-primary" download>Download bundle (.zip)</a>
-
-        <section class="publish-help sidebar-card">
-          <h2>Publish to Overlord with Cowork</h2>
-          <ol class="publish-steps">
-            <li>Extract the downloaded zip to a folder.</li>
-            <li>Open Cowork (the desktop app) and grant it access to that folder.</li>
-            <li>Sign into Overlord, Finance, or whichever iFixit subdomain you're publishing to in Chrome.</li>
-            <li>Open a new guide form at <code>&lt;subdomain&gt;.ifixit.com/Guide/new/Topic/Root</code> and have that tab visible.</li>
-            <li>Click <strong>Copy Cowork prompt</strong> below, then paste it as your message in Cowork. Cowork creates the guide skeleton, fills in all steps and substeps, and applies bullet styling.</li>
-            <li>After Cowork finishes, drag the PNG images from your extracted folder into each step's image dropzone manually.</li>
-            <li>Review the guide. Privacy is set to Private by default — share the URL with whoever needs to review.</li>
-          </ol>
-          <div class="copy-prompt-row">
-            <button id="copy-prompt" class="primary-btn" type="button">
-              Copy Cowork prompt to clipboard
-            </button>
-            <span id="copy-prompt-status" class="copy-prompt-status" aria-live="polite"></span>
-          </div>
-        </section>
-
         <button type="button" id="another-btn" class="btn-secondary">Generate another</button>
       </div>
 
@@ -560,6 +544,24 @@
         <h2>Guides created</h2>
         <p id="stats-total" class="stats-total" aria-live="polite">…</p>
       </section>
+      <section class="publish-help sidebar-card" aria-label="Publish to Overlord with Cowork">
+        <h2>Publish to Overlord with Cowork</h2>
+        <ol class="publish-steps">
+          <li>Extract the downloaded zip to a folder.</li>
+          <li>Open Cowork (the desktop app) and grant it access to that folder.</li>
+          <li>Sign into Overlord, Finance, or whichever iFixit subdomain you're publishing to in Chrome.</li>
+          <li>Open a new guide form at <code>&lt;subdomain&gt;.ifixit.com/Guide/new/Topic/Root</code> and have that tab visible.</li>
+          <li>Click <strong>Copy Cowork prompt</strong> below, then paste it as your message in Cowork. Cowork creates the guide skeleton, fills in all steps and substeps, and applies bullet styling.</li>
+          <li>After Cowork finishes, drag the PNG images from your extracted folder into each step's image dropzone manually.</li>
+          <li>Review the guide. Privacy is set to Private by default — share the URL with whoever needs to review.</li>
+        </ol>
+        <div class="copy-prompt-row">
+          <button id="copy-prompt" class="primary-btn" type="button">
+            Copy Cowork prompt to clipboard
+          </button>
+          <span id="copy-prompt-status" class="copy-prompt-status" aria-live="polite"></span>
+        </div>
+      </section>
     </aside>
   </div>
 
@@ -570,6 +572,7 @@
     const STAGE_LABELS = {
       "queued": "Queued…",
       "uploading": "Uploading to Gemini…",
+      "transcoding": "Transcoding video for Gemini…",
       "analyzing": "Analyzing video…",
       "extracting frames": "Extracting screenshots…",
       "packaging": "Packaging output…",

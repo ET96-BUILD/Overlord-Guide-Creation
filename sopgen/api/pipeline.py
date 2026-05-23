@@ -19,12 +19,13 @@ from sopgen.api.job_registry import (
     STAGE_DONE,
     STAGE_EXTRACTING,
     STAGE_PACKAGING,
+    STAGE_TRANSCODING,
     STATUS_DONE,
     STATUS_RUNNING,
 )
 from sopgen.api.stats import GuidesStats
 from sopgen.core.config import Settings
-from sopgen.core.ffmpeg import FFmpegExtractor
+from sopgen.core.ffmpeg import FFmpegExtractor, is_gemini_friendly_codec
 from sopgen.core.jobs import JobManager
 from sopgen.core.validation import run_with_repair
 from sopgen.gemini.client import GeminiClient
@@ -63,6 +64,28 @@ async def run_pipeline_async(
     """
     jobs = JobManager(settings)
     try:
+        # Normalise the upload to H.264 if it's in a codec Gemini's Files
+        # API can't decode (most often HEVC out of the Windows Snipping
+        # Tool). Cheap to probe; the transcode itself only runs when we
+        # actually need it.
+        ffmpeg = FFmpegExtractor(settings.ffmpeg_path)
+        codec = await asyncio.to_thread(ffmpeg.probe_codec, upload_path)
+        if not is_gemini_friendly_codec(codec):
+            registry.set_stage(job_id, STAGE_TRANSCODING, status=STATUS_RUNNING)
+            logger.info("[%s] Transcoding %s → H.264 (codec=%s)", job_id, upload_path.name, codec)
+            transcoded = upload_path.with_name(f"{upload_path.stem}.h264.mp4")
+            ok = await asyncio.to_thread(
+                ffmpeg.transcode_to_h264, upload_path, transcoded
+            )
+            if ok:
+                upload_path = transcoded
+                mime_type = "video/mp4"
+            else:
+                logger.warning(
+                    "[%s] Transcode failed for codec=%s — attempting Gemini upload as-is",
+                    job_id, codec,
+                )
+
         registry.set_stage(job_id, STAGE_ANALYZING, status=STATUS_RUNNING)
         sop = await asyncio.to_thread(
             _run_gemini,

@@ -18,6 +18,28 @@ _POLL_INTERVAL_S = 3
 _MAX_POLL_S = 300  # 5 min
 
 
+def _format_file_error(file_obj: object) -> str:
+    """Pull whatever Google attached to a FAILED file into a readable string.
+
+    The google-genai SDK exposes the failure detail as ``file.error`` with
+    ``code`` and ``message`` fields, but older/newer SDK versions and edge
+    cases sometimes leave it as None or a dict. Be defensive — we never
+    want to mask the original error with an AttributeError.
+    """
+    err = getattr(file_obj, "error", None)
+    if err is None:
+        return "no error detail returned"
+    message = getattr(err, "message", None) or (
+        err.get("message") if isinstance(err, dict) else None
+    )
+    code = getattr(err, "code", None) or (
+        err.get("code") if isinstance(err, dict) else None
+    )
+    if message and code is not None:
+        return f"{message} (code={code})"
+    return str(message or err)
+
+
 class GeminiClient:
     """Manages the GenAI client, video uploads, and content generation."""
 
@@ -40,10 +62,21 @@ class GeminiClient:
         """Upload via Files API and poll until processing completes.
 
         Returns the file object that can be passed to ``generate_content``.
+        Raises ``RuntimeError`` with Google's status detail on FAILED state.
         """
-        logger.info("Uploading video via Files API: %s", video_path.name)
+        size_bytes = video_path.stat().st_size
+        logger.info(
+            "Uploading video via Files API: %s (%.1f MB)",
+            video_path.name,
+            size_bytes / (1024 * 1024),
+        )
         file_obj = self._client.files.upload(file=str(video_path))
-        logger.info("Upload started — name=%s", file_obj.name)
+        logger.info(
+            "Upload started — name=%s state=%s mime_type=%s",
+            file_obj.name,
+            getattr(file_obj, "state", None),
+            getattr(file_obj, "mime_type", None),
+        )
 
         elapsed = 0.0
         while getattr(file_obj, "state", None) == "PROCESSING":
@@ -57,7 +90,18 @@ class GeminiClient:
             logger.debug("Poll — state=%s elapsed=%.0fs", file_obj.state, elapsed)
 
         if getattr(file_obj, "state", None) == "FAILED":
-            raise RuntimeError(f"Files API processing failed for {file_obj.name}")
+            reason = _format_file_error(file_obj)
+            logger.error(
+                "Files API processing FAILED for %s (%s): %s",
+                file_obj.name,
+                video_path.name,
+                reason,
+            )
+            raise RuntimeError(
+                f"Files API processing failed for {file_obj.name}: {reason}. "
+                f"Most likely an unsupported codec, corrupt/truncated file, "
+                f"or a renamed non-mp4 — try re-encoding to H.264 + AAC mp4."
+            )
 
         logger.info("Video ready: %s", file_obj.uri)
         return file_obj

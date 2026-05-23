@@ -26,6 +26,7 @@ STATUS_ERROR = "error"
 
 STAGE_QUEUED = "queued"
 STAGE_UPLOADING = "uploading"
+STAGE_TRANSCODING = "transcoding"
 STAGE_ANALYZING = "analyzing"
 STAGE_EXTRACTING = "extracting frames"
 STAGE_PACKAGING = "packaging"

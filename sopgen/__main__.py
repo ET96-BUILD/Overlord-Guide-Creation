@@ -13,7 +13,7 @@ from typing import Optional
 import click
 
 from sopgen.core.config import Settings
-from sopgen.core.ffmpeg import FFmpegExtractor
+from sopgen.core.ffmpeg import FFmpegExtractor, is_gemini_friendly_codec
 from sopgen.core.mime import validate_video_file, supported_types_list
 from sopgen.core.validation import run_with_repair
 from sopgen.gemini.client import GeminiClient
@@ -179,6 +179,24 @@ def _process_video(
                 f"Supported: {supported_types_list()}"
             )
         click.echo(f"MIME type: {mime_type}")
+
+        # Normalise the upload to H.264 if it's in a codec Gemini's Files
+        # API can't decode (most often HEVC out of the Windows Snipping
+        # Tool). Probing is cheap; the transcode only runs when needed.
+        ffmpeg = FFmpegExtractor(settings.ffmpeg_path)
+        codec = ffmpeg.probe_codec(video_path)
+        if not is_gemini_friendly_codec(codec):
+            click.echo(f"Transcoding {codec} -> H.264 (one-time, ~30-60s)...")
+            transcoded = video_path.with_name(f"{video_path.stem}.h264.mp4")
+            if ffmpeg.transcode_to_h264(video_path, transcoded):
+                video_path = transcoded
+                mime_type = "video/mp4"
+                click.echo(f"Using transcoded file: {video_path.name}")
+            else:
+                click.echo(
+                    f"Warning: transcode failed; uploading original {codec} as-is.",
+                    err=True,
+                )
 
         click.echo("Analyzing video with Gemini…")
         gemini = GeminiClient(settings)

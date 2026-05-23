@@ -425,12 +425,15 @@ class TestStaticFrontend:
         assert "/v1/leaderboard" in body
         assert "Top guide makers" in body
 
-    def test_sidebar_has_two_stacked_cards(self, client):
+    def test_sidebar_has_three_stacked_cards(self, client):
         body = client.get("/").text
-        # Two sidebar-card sections: "Top guide makers" + "Guides created"
-        assert body.count("sidebar-card") >= 2
+        # Three sidebar-card sections: Top guide makers + Guides created
+        # + Publish to Overlord with Cowork (always visible, even before
+        # any video is uploaded).
+        assert body.count("sidebar-card") >= 3
         assert "Top guide makers" in body
         assert "Guides created" in body
+        assert "Publish to Overlord with Cowork" in body
 
     def test_stats_total_lives_in_sidebar_card(self, client):
         body = client.get("/").text
@@ -472,24 +475,53 @@ class TestCoworkPrompt:
         assert "Caution:" in body
         assert "Begin by confirming the two inputs." in body
 
-    def test_done_panel_has_publish_help_markup(self, client):
+    def test_publish_help_markup_present(self, client):
         body = client.get("/").text
         assert "Publish to Overlord with Cowork" in body
         assert '<ol class="publish-steps">' in body
         assert 'id="copy-prompt"' in body
         assert 'id="copy-prompt-status"' in body
 
+    def test_publish_help_lives_in_sidebar_not_done_panel(self, client):
+        """The publish workflow must be visible BEFORE a run starts —
+        moved out of #done into a third always-visible sidebar card."""
+        body = client.get("/").text
+
+        # Extract just the #done panel block; the publish-help markup
+        # must not appear inside it any more.
+        done_start = body.index('id="done"')
+        done_end = body.index("</div>", done_start)
+        done_block = body[done_start:done_end]
+        assert "publish-help" not in done_block
+        assert "copy-prompt" not in done_block
+        assert "Publish to Overlord with Cowork" not in done_block
+
+        # And it must appear inside the sidebar instead.
+        sidebar_start = body.index('id="sidebar"')
+        sidebar_end = body.index("</aside>", sidebar_start)
+        sidebar_block = body[sidebar_start:sidebar_end]
+        assert "publish-help" in sidebar_block
+        assert 'id="copy-prompt"' in sidebar_block
+        assert "Publish to Overlord with Cowork" in sidebar_block
+
     def test_publish_help_reuses_sidebar_card_class(self, client):
         body = client.get("/").text
         # The publish-help section is supposed to inherit the sidebar
-        # light-card chrome via shared classes.
-        assert 'class="publish-help sidebar-card"' in body
+        # card chrome via shared classes.
+        assert "publish-help sidebar-card" in body
 
     def test_index_html_references_cowork_prompt_url(self, client):
         body = client.get("/").text
         # The JS must reference the prompt URL so the click handler can
         # fetch it.
         assert "/cowork_prompt.txt" in body
+
+    def test_publish_steps_code_wraps_long_urls(self, client):
+        body = client.get("/").text
+        # The narrow sidebar column needs word-break on the inline-code
+        # element so the <subdomain>.ifixit.com URL in step 4 wraps
+        # instead of overflowing horizontally.
+        assert "word-break: break-all" in body
 
 
 # ═══════════════════════════════════════════════════════════════════════
