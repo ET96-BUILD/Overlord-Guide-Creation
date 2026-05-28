@@ -603,6 +603,31 @@
 
     let pollTimer = null;
 
+    // ── Retry-with-backoff fetch wrapper ───────────────────────────
+    // Cloud Run cold-starts (~10-25s) surface as TypeError ("Failed to
+    // fetch") from the browser's fetch API. Only transport failures
+    // are retried — 4xx/5xx come back as Response objects and are
+    // returned as-is for the caller to handle.
+    async function fetchWithRetry(url, init = {}, opts = {}) {
+      const maxAttempts = opts.maxAttempts ?? 8;
+      const baseDelay   = opts.baseDelay   ?? 500;   // ms
+      const maxDelay    = opts.maxDelay    ?? 5000;  // ms
+      const onRetry     = opts.onRetry     ?? null;
+      let lastErr;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          return await fetch(url, init);
+        } catch (err) {
+          lastErr = err;
+          if (attempt === maxAttempts - 1) break;
+          const delay = Math.min(maxDelay, baseDelay * 2 ** attempt);
+          if (onRetry) onRetry(attempt + 1, delay);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+      throw lastErr;
+    }
+
     // ── Server-driven model default ─────────────────────────────────
     function selectModelRadio(modelValue) {
       const radios = document.querySelectorAll('input[name="model"]');
@@ -616,14 +641,14 @@
         }
       }
     }
-    fetch("/v1/config")
+    fetchWithRetry("/v1/config")
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then((cfg) => selectModelRadio(cfg.default_model))
       .catch(() => selectModelRadio(FALLBACK_MODEL));
 
     // ── Stats total (sidebar card) ──────────────────────────────────
     function refreshStats() {
-      fetch("/v1/stats")
+      fetchWithRetry("/v1/stats")
         .then((r) => (r.ok ? r.json() : Promise.reject(r)))
         .then((s) => {
           const n = typeof s.guides_created === "number" ? s.guides_created : 0;
@@ -673,7 +698,7 @@
     }
 
     function refreshLeaderboard() {
-      fetch("/v1/leaderboard?limit=5")
+      fetchWithRetry("/v1/leaderboard?limit=5")
         .then((r) => (r.ok ? r.json() : Promise.reject(r)))
         .then((data) => renderLeaderboard(data.top || []))
         .catch(() => { sidebar.hidden = true; });
@@ -743,7 +768,7 @@
       // 1) Pull the canonical prompt text from disk.
       let text;
       try {
-        const resp = await fetch(COWORK_PROMPT_URL);
+        const resp = await fetchWithRetry(COWORK_PROMPT_URL);
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         text = await resp.text();
       } catch (_) {
@@ -828,7 +853,20 @@
 
       let job;
       try {
-        const resp = await fetch("/v1/sop", { method: "POST", body: form });
+        const resp = await fetchWithRetry(
+          "/v1/sop",
+          { method: "POST", body: form },
+          {
+            // Cold-start the Cloud Run container if needed. The first
+            // retry kick flips the stage label so the user sees a
+            // friendly explanation instead of a silent stall.
+            onRetry: (attempt /* , delay */) => {
+              if (attempt === 1) {
+                stageLabel.textContent = "Waking the server…";
+              }
+            },
+          },
+        );
         if (!resp.ok) {
           const detail = await safeDetail(resp);
           throw new Error(detail || `Upload failed: HTTP ${resp.status}`);
@@ -845,7 +883,16 @@
     function pollStatus(jobId) {
       const tick = async () => {
         try {
-          const resp = await fetch(`/v1/jobs/${encodeURIComponent(jobId)}/status`);
+          // Tight retry budget on the poll: a single transient blip
+          // shouldn't kill the job, but we also must finish inside the
+          // 2-second poll cadence so ticks don't pile up. 2 attempts
+          // with 300 ms backoff = ~300 ms worst case before falling
+          // through to the next setInterval tick.
+          const resp = await fetchWithRetry(
+            `/v1/jobs/${encodeURIComponent(jobId)}/status`,
+            {},
+            { maxAttempts: 2, baseDelay: 300 },
+          );
           if (!resp.ok) {
             const detail = await safeDetail(resp);
             throw new Error(detail || `Status fetch failed: HTTP ${resp.status}`);

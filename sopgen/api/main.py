@@ -11,6 +11,7 @@ from sopgen.api.job_registry import JobRegistry
 from sopgen.api.routes import router
 from sopgen.api.stats import GuidesStats
 from sopgen.core.config import Settings
+from sopgen.core.jobs import JobManager
 
 
 _FRONTEND_DIR = Path(__file__).parent / "static"
@@ -26,9 +27,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
     )
     app.state.settings = settings
-    # Process-local in-memory registry for async job state. Single-worker
-    # is fine for v1; deferred concern is to swap for Redis at scale.
-    app.state.job_registry = JobRegistry()
+    # Disk-backed job registry: in-memory hot path + per-job
+    # <job_dir>/status.json mirror so a container restart can recover
+    # the state. Single-worker is still authoritative within a process;
+    # at horizontal scale, swap for Redis/Firestore.
+    app.state.job_registry = JobRegistry(jobs=JobManager(settings))
     # Persistent guides-created counter. Loaded from disk on first read.
     app.state.stats = GuidesStats(settings)
 
