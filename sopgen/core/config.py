@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # video inference). Default 10 minutes; google-genai's HttpOptions
     # takes ms internally — we convert at the client.
     gemini_request_timeout_seconds: int = 600
+    # Transparent retry on 503 UNAVAILABLE (Gemini's "the requested model
+    # is over-demand right now" response). Backoff is base * 3^attempt,
+    # so defaults give 3 attempts with 5s + 15s = 20s total wait worst
+    # case. Other errors (400 / 429 / 500 / network) surface immediately.
+    gemini_unavailable_max_attempts: int = 3
+    gemini_unavailable_base_delay_seconds: int = 5
 
     # ── Media processing ────────────────────────────────────────────────
     gemini_media_resolution: Literal["low", "default"] = "default"
